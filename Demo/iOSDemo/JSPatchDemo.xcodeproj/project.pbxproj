@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0D8070061D33703E00C3523D /* MKViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 0D8070051D33703E00C3523D /* MKViewController.m */; };
 		2D0DF7071B22F75C005695DA /* inheritTest.js in Resources */ = {isa = PBXBuildFile; fileRef = 2D0DF7061B22F75C005695DA /* inheritTest.js */; };
 		2D5D89211B0B8BFF009382EC /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 2D5D89181B0B8BFF009382EC /* AppDelegate.m */; };
 		2D5D89251B0B8BFF009382EC /* JPViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 2D5D891E1B0B8BFF009382EC /* JPViewController.m */; };
@@ -88,6 +89,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0D8070041D33703E00C3523D /* MKViewController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MKViewController.h; sourceTree = "<group>"; };
+		0D8070051D33703E00C3523D /* MKViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MKViewController.m; sourceTree = "<group>"; };
 		2D0DF7061B22F75C005695DA /* inheritTest.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = inheritTest.js; sourceTree = "<group>"; };
 		2D5D89171B0B8BFF009382EC /* AppDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		2D5D89181B0B8BFF009382EC /* AppDelegate.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
@@ -242,6 +245,8 @@
 				2D6D12F91B0B8CF20095A435 /* Supporting Files */,
 				2D5D89171B0B8BFF009382EC /* AppDelegate.h */,
 				2D5D89181B0B8BFF009382EC /* AppDelegate.m */,
+				0D8070041D33703E00C3523D /* MKViewController.h */,
+				0D8070051D33703E00C3523D /* MKViewController.m */,
 				2D5D891D1B0B8BFF009382EC /* JPViewController.h */,
 				2D5D891E1B0B8BFF009382EC /* JPViewController.m */,
 				2D6D13001B0B8CFF0095A435 /* demo.js */,
@@ -693,6 +698,7 @@
 				369493B41D001EAE003F44CA /* trampoline_armv7.S in Sources */,
 				369493B01D001EAE003F44CA /* ffi_arm64.c in Sources */,
 				3613C38C1C6329F300E915CB /* zip.c in Sources */,
+				0D8070061D33703E00C3523D /* MKViewController.m in Sources */,
 				2D6D12FF1B0B8CF20095A435 /* main.m in Sources */,
 				3646F8B41CA0F89C00E10774 /* JPLocker.m in Sources */,
 				369EC2971C9925A400334A64 /* JPSpecialInit.m in Sources */,

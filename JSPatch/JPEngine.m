@@ -18,9 +18,9 @@
 #define JPBOXING_GEN(_name, _prop, _type) \
 + (instancetype)_name:(_type)obj  \
 {   \
-    JPBoxing *boxing = [[JPBoxing alloc] init]; \
-    boxing._prop = obj;   \
-    return boxing;  \
+JPBoxing *boxing = [[JPBoxing alloc] init]; \
+boxing._prop = obj;   \
+return boxing;  \
 }
 
 JPBOXING_GEN(boxObj, obj, id)
@@ -61,7 +61,7 @@ static NSMethodSignature *fixSignature(NSMethodSignature *signature)
     if ([[UIDevice currentDevice].systemVersion floatValue] < 7.1) {
         BOOL isReturnDouble = (strcmp([signature methodReturnType], "d") == 0);
         BOOL isReturnFloat = (strcmp([signature methodReturnType], "f") == 0);
-
+        
         if (isReturnDouble || isReturnFloat) {
             NSMutableString *types = [NSMutableString stringWithFormat:@"%s@:", isReturnDouble ? @encode(JPDouble) : @encode(JPFloat)];
             for (int i = 2; i < signature.numberOfArguments; i++) {
@@ -157,7 +157,7 @@ static void (^_exceptionBlock)(NSString *log) = ^void(NSString *log) {
     context[@"_OC_defineClass"] = ^(NSString *classDeclaration, JSValue *instanceMethods, JSValue *classMethods) {
         return defineClass(classDeclaration, instanceMethods, classMethods);
     };
-
+    
     context[@"_OC_defineProtocol"] = ^(NSString *protocolDeclaration, JSValue *instProtocol, JSValue *clsProtocol) {
         return defineProtocol(protocolDeclaration, instProtocol,clsProtocol);
     };
@@ -190,7 +190,7 @@ static void (^_exceptionBlock)(NSString *log) = ^void(NSString *log) {
         id obj = formatJSToOC(jsval);
         return [[JSContext currentContext][@"_formatOCToJS"] callWithArguments:@[formatOCToJS([JPBoxing boxWeakObj:obj])]];
     };
-
+    
     context[@"__strong"] = ^id(JSValue *jsval) {
         id obj = formatJSToOC(jsval);
         return [[JSContext currentContext][@"_formatOCToJS"] callWithArguments:@[formatOCToJS(obj)]];
@@ -204,7 +204,7 @@ static void (^_exceptionBlock)(NSString *log) = ^void(NSString *log) {
     context[@"autoConvertOCType"] = ^(BOOL autoConvert) {
         _autoConvert = autoConvert;
     };
-
+    
     context[@"convertOCNumberToString"] = ^(BOOL convertOCNumberToString) {
         _convertOCNumberToString = convertOCNumberToString;
     };
@@ -223,7 +223,7 @@ static void (^_exceptionBlock)(NSString *log) = ^void(NSString *log) {
     context[@"resourcePath"] = ^(NSString *filePath) {
         return [_scriptRootDir stringByAppendingPathComponent:filePath];
     };
-
+    
     context[@"dispatch_after"] = ^(double time, JSValue *func) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(time * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [func callWithArguments:nil];
@@ -442,15 +442,15 @@ static void addGroupMethodsToProtocol(Protocol* protocol,JSValue *groupMethods,B
         if ([selectorName componentsSeparatedByString:@":"].count - 1 < argStrArr.count) {
             selectorName = [selectorName stringByAppendingString:@":"];
         }
-
+        
         if (typeEncode) {
             addMethodToProtocol(protocol, selectorName, typeEncode, isInstance);
             
         } else {
             if (!_protocolTypeEncodeDict) {
                 _protocolTypeEncodeDict = [[NSMutableDictionary alloc] init];
-                #define JP_DEFINE_TYPE_ENCODE_CASE(_type) \
-                    [_protocolTypeEncodeDict setObject:[NSString stringWithUTF8String:@encode(_type)] forKey:@#_type];\
+#define JP_DEFINE_TYPE_ENCODE_CASE(_type) \
+[_protocolTypeEncodeDict setObject:[NSString stringWithUTF8String:@encode(_type)] forKey:@#_type];\
 
                 JP_DEFINE_TYPE_ENCODE_CASE(id);
                 JP_DEFINE_TYPE_ENCODE_CASE(BOOL);
@@ -480,7 +480,7 @@ static void addGroupMethodsToProtocol(Protocol* protocol,JSValue *groupMethods,B
 #else
                 JP_DEFINE_TYPE_ENCODE_CASE(NSEdgeInsets);
 #endif
-
+                
                 [_protocolTypeEncodeDict setObject:@"@?" forKey:@"block"];
                 [_protocolTypeEncodeDict setObject:@"^@" forKey:@"id*"];
             }
@@ -538,7 +538,7 @@ static NSDictionary *defineClass(NSString *classDeclaration, JSValue *instanceMe
     superClassName = trim(superClassName);
     
     NSArray *protocols = [protocolNames length] ? [protocolNames componentsSeparatedByString:@","] : nil;
-    
+    // 如果这个类没有在本地创建,就利用runtime创建
     Class cls = NSClassFromString(className);
     if (!cls) {
         Class superCls = NSClassFromString(superClassName);
@@ -556,7 +556,7 @@ static NSDictionary *defineClass(NSString *classDeclaration, JSValue *instanceMe
             class_addProtocol (cls, protocol);
         }
     }
-    
+    //循环两次, 第一次检测-实例方法 第二次+检测类方法
     for (int i = 0; i < 2; i ++) {
         BOOL isInstance = i == 0;
         JSValue *jsMethods = isInstance ? instanceMethods: classMethods;
@@ -564,7 +564,9 @@ static NSDictionary *defineClass(NSString *classDeclaration, JSValue *instanceMe
         Class currCls = isInstance ? cls: objc_getMetaClass(className.UTF8String);
         NSDictionary *methodDict = [jsMethods toDictionary];
         for (NSString *jsMethodName in methodDict.allKeys) {
+            // 获取方法名对应得方法
             JSValue *jsMethodArr = [jsMethods valueForProperty:jsMethodName];
+            //方法参数的个数
             int numberOfArg = [jsMethodArr[0] toInt32];
             NSString *selectorName = convertJPSelectorString(jsMethodName);
             
@@ -578,7 +580,9 @@ static NSDictionary *defineClass(NSString *classDeclaration, JSValue *instanceMe
             } else {
                 BOOL overrided = NO;
                 for (NSString *protocolName in protocols) {
+                    //检测selectorName方法是不是实例对象协议必须实现方法
                     char *types = methodTypesInProtocol(protocolName, selectorName, isInstance, YES);
+                    //检测selectorName方法是不是实例对象协议非必须实现方法
                     if (!types) types = methodTypesInProtocol(protocolName, selectorName, isInstance, NO);
                     if (types) {
                         overrideMethod(currCls, selectorName, jsMethod, !isInstance, types);
@@ -605,7 +609,7 @@ static NSDictionary *defineClass(NSString *classDeclaration, JSValue *instanceMe
     class_addMethod(cls, @selector(getProp:), (IMP)getPropIMP, "@@:@");
     class_addMethod(cls, @selector(setProp:forKey:), (IMP)setPropIMP, "v@:@@");
 #pragma clang diagnostic pop
-
+    
     return @{@"cls": className, @"superCls": superClassName};
 }
 
@@ -657,27 +661,27 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
     for (NSUInteger i = 2; i < numberOfArguments; i++) {
         const char *argumentType = [methodSignature getArgumentTypeAtIndex:i];
         switch(argumentType[0] == 'r' ? argumentType[1] : argumentType[0]) {
-        
-            #define JP_FWD_ARG_CASE(_typeChar, _type) \
-            case _typeChar: {   \
-                _type arg;  \
-                [invocation getArgument:&arg atIndex:i];    \
-                [argList addObject:@(arg)]; \
-                break;  \
-            }
-            JP_FWD_ARG_CASE('c', char)
-            JP_FWD_ARG_CASE('C', unsigned char)
-            JP_FWD_ARG_CASE('s', short)
-            JP_FWD_ARG_CASE('S', unsigned short)
-            JP_FWD_ARG_CASE('i', int)
-            JP_FWD_ARG_CASE('I', unsigned int)
-            JP_FWD_ARG_CASE('l', long)
-            JP_FWD_ARG_CASE('L', unsigned long)
-            JP_FWD_ARG_CASE('q', long long)
-            JP_FWD_ARG_CASE('Q', unsigned long long)
-            JP_FWD_ARG_CASE('f', float)
-            JP_FWD_ARG_CASE('d', double)
-            JP_FWD_ARG_CASE('B', BOOL)
+                
+#define JP_FWD_ARG_CASE(_typeChar, _type) \
+case _typeChar: {   \
+_type arg;  \
+[invocation getArgument:&arg atIndex:i];    \
+[argList addObject:@(arg)]; \
+break;  \
+}
+                JP_FWD_ARG_CASE('c', char)
+                JP_FWD_ARG_CASE('C', unsigned char)
+                JP_FWD_ARG_CASE('s', short)
+                JP_FWD_ARG_CASE('S', unsigned short)
+                JP_FWD_ARG_CASE('i', int)
+                JP_FWD_ARG_CASE('I', unsigned int)
+                JP_FWD_ARG_CASE('l', long)
+                JP_FWD_ARG_CASE('L', unsigned long)
+                JP_FWD_ARG_CASE('q', long long)
+                JP_FWD_ARG_CASE('Q', unsigned long long)
+                JP_FWD_ARG_CASE('f', float)
+                JP_FWD_ARG_CASE('d', double)
+                JP_FWD_ARG_CASE('B', BOOL)
             case '@': {
                 __unsafe_unretained id arg;
                 [invocation getArgument:&arg atIndex:i];
@@ -690,13 +694,13 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
             }
             case '{': {
                 NSString *typeString = extractStructName([NSString stringWithUTF8String:argumentType]);
-                #define JP_FWD_ARG_STRUCT(_type, _transFunc) \
-                if ([typeString rangeOfString:@#_type].location != NSNotFound) {    \
-                    _type arg; \
-                    [invocation getArgument:&arg atIndex:i];    \
-                    [argList addObject:[JSValue _transFunc:arg inContext:_context]];  \
-                    break; \
-                }
+#define JP_FWD_ARG_STRUCT(_type, _transFunc) \
+if ([typeString rangeOfString:@#_type].location != NSNotFound) {    \
+_type arg; \
+[invocation getArgument:&arg atIndex:i];    \
+[argList addObject:[JSValue _transFunc:arg inContext:_context]];  \
+break; \
+}
                 JP_FWD_ARG_STRUCT(CGRect, valueWithRect)
                 JP_FWD_ARG_STRUCT(CGPoint, valueWithPoint)
                 JP_FWD_ARG_STRUCT(CGSize, valueWithSize)
@@ -770,96 +774,96 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
     if (strcmp(returnType, @encode(JPFloat)) == 0) {
         strcpy(returnType, @encode(float));
     }
-
+    
     switch (returnType[0] == 'r' ? returnType[1] : returnType[0]) {
-        #define JP_FWD_RET_CALL_JS \
-            JSValue *jsval; \
-            [_JSMethodForwardCallLock lock];   \
-            jsval = [jsFunc callWithArguments:params]; \
-            [_JSMethodForwardCallLock unlock]; \
-            while (![jsval isNull] && ![jsval isUndefined] && [jsval hasProperty:@"__isPerformInOC"]) { \
-                NSArray *args = nil;  \
-                JSValue *cb = jsval[@"cb"]; \
-                if ([jsval hasProperty:@"sel"]) {   \
-                    id callRet = callSelector(![jsval[@"clsName"] isUndefined] ? [jsval[@"clsName"] toString] : nil, [jsval[@"sel"] toString], jsval[@"args"], ![jsval[@"obj"] isUndefined] ? jsval[@"obj"] : nil, NO);  \
-                    args = @[[_context[@"_formatOCToJS"] callWithArguments:callRet ? @[callRet] : _formatOCToJSList(@[_nilObj])]];  \
-                }   \
-                [_JSMethodForwardCallLock lock];    \
-                jsval = [cb callWithArguments:args];  \
-                [_JSMethodForwardCallLock unlock];  \
-            }
+#define JP_FWD_RET_CALL_JS \
+JSValue *jsval; \
+[_JSMethodForwardCallLock lock];   \
+jsval = [jsFunc callWithArguments:params]; \
+[_JSMethodForwardCallLock unlock]; \
+while (![jsval isNull] && ![jsval isUndefined] && [jsval hasProperty:@"__isPerformInOC"]) { \
+NSArray *args = nil;  \
+JSValue *cb = jsval[@"cb"]; \
+if ([jsval hasProperty:@"sel"]) {   \
+id callRet = callSelector(![jsval[@"clsName"] isUndefined] ? [jsval[@"clsName"] toString] : nil, [jsval[@"sel"] toString], jsval[@"args"], ![jsval[@"obj"] isUndefined] ? jsval[@"obj"] : nil, NO);  \
+args = @[[_context[@"_formatOCToJS"] callWithArguments:callRet ? @[callRet] : _formatOCToJSList(@[_nilObj])]];  \
+}   \
+[_JSMethodForwardCallLock lock];    \
+jsval = [cb callWithArguments:args];  \
+[_JSMethodForwardCallLock unlock];  \
+}
+            
+#define JP_FWD_RET_CASE_RET(_typeChar, _type, _retCode)   \
+case _typeChar : { \
+JP_FWD_RET_CALL_JS \
+_retCode \
+[invocation setReturnValue:&ret];\
+break;  \
+}
+            
+#define JP_FWD_RET_CASE(_typeChar, _type, _typeSelector)   \
+JP_FWD_RET_CASE_RET(_typeChar, _type, _type ret = [[jsval toObject] _typeSelector];)   \
 
-        #define JP_FWD_RET_CASE_RET(_typeChar, _type, _retCode)   \
-            case _typeChar : { \
-                JP_FWD_RET_CALL_JS \
-                _retCode \
-                [invocation setReturnValue:&ret];\
-                break;  \
-            }
+#define JP_FWD_RET_CODE_ID \
+id __autoreleasing ret = formatJSToOC(jsval); \
+if (ret == _nilObj ||   \
+([ret isKindOfClass:[NSNumber class]] && strcmp([ret objCType], "c") == 0 && ![ret boolValue])) ret = nil;  \
 
-        #define JP_FWD_RET_CASE(_typeChar, _type, _typeSelector)   \
-            JP_FWD_RET_CASE_RET(_typeChar, _type, _type ret = [[jsval toObject] _typeSelector];)   \
-
-        #define JP_FWD_RET_CODE_ID \
-            id __autoreleasing ret = formatJSToOC(jsval); \
-            if (ret == _nilObj ||   \
-                ([ret isKindOfClass:[NSNumber class]] && strcmp([ret objCType], "c") == 0 && ![ret boolValue])) ret = nil;  \
-
-        #define JP_FWD_RET_CODE_POINTER    \
-            void *ret; \
-            id obj = formatJSToOC(jsval); \
-            if ([obj isKindOfClass:[JPBoxing class]]) { \
-                ret = [((JPBoxing *)obj) unboxPointer]; \
-            }
-
-        #define JP_FWD_RET_CODE_CLASS    \
-            Class ret;   \
-            id obj = formatJSToOC(jsval); \
-            if ([obj isKindOfClass:[JPBoxing class]]) { \
-                ret = [((JPBoxing *)obj) unboxClass]; \
-            }
-
-        #define JP_FWD_RET_CODE_SEL    \
-            SEL ret;   \
-            id obj = formatJSToOC(jsval); \
-            if ([obj isKindOfClass:[NSString class]]) { \
-                ret = NSSelectorFromString(obj); \
-            }
-
-        JP_FWD_RET_CASE_RET('@', id, JP_FWD_RET_CODE_ID)
-        JP_FWD_RET_CASE_RET('^', void*, JP_FWD_RET_CODE_POINTER)
-        JP_FWD_RET_CASE_RET('*', void*, JP_FWD_RET_CODE_POINTER)
-        JP_FWD_RET_CASE_RET('#', Class, JP_FWD_RET_CODE_CLASS)
-        JP_FWD_RET_CASE_RET(':', SEL, JP_FWD_RET_CODE_SEL)
-
-        JP_FWD_RET_CASE('c', char, charValue)
-        JP_FWD_RET_CASE('C', unsigned char, unsignedCharValue)
-        JP_FWD_RET_CASE('s', short, shortValue)
-        JP_FWD_RET_CASE('S', unsigned short, unsignedShortValue)
-        JP_FWD_RET_CASE('i', int, intValue)
-        JP_FWD_RET_CASE('I', unsigned int, unsignedIntValue)
-        JP_FWD_RET_CASE('l', long, longValue)
-        JP_FWD_RET_CASE('L', unsigned long, unsignedLongValue)
-        JP_FWD_RET_CASE('q', long long, longLongValue)
-        JP_FWD_RET_CASE('Q', unsigned long long, unsignedLongLongValue)
-        JP_FWD_RET_CASE('f', float, floatValue)
-        JP_FWD_RET_CASE('d', double, doubleValue)
-        JP_FWD_RET_CASE('B', BOOL, boolValue)
-
+#define JP_FWD_RET_CODE_POINTER    \
+void *ret; \
+id obj = formatJSToOC(jsval); \
+if ([obj isKindOfClass:[JPBoxing class]]) { \
+ret = [((JPBoxing *)obj) unboxPointer]; \
+}
+            
+#define JP_FWD_RET_CODE_CLASS    \
+Class ret;   \
+id obj = formatJSToOC(jsval); \
+if ([obj isKindOfClass:[JPBoxing class]]) { \
+ret = [((JPBoxing *)obj) unboxClass]; \
+}
+            
+#define JP_FWD_RET_CODE_SEL    \
+SEL ret;   \
+id obj = formatJSToOC(jsval); \
+if ([obj isKindOfClass:[NSString class]]) { \
+ret = NSSelectorFromString(obj); \
+}
+            
+            JP_FWD_RET_CASE_RET('@', id, JP_FWD_RET_CODE_ID)
+            JP_FWD_RET_CASE_RET('^', void*, JP_FWD_RET_CODE_POINTER)
+            JP_FWD_RET_CASE_RET('*', void*, JP_FWD_RET_CODE_POINTER)
+            JP_FWD_RET_CASE_RET('#', Class, JP_FWD_RET_CODE_CLASS)
+            JP_FWD_RET_CASE_RET(':', SEL, JP_FWD_RET_CODE_SEL)
+            
+            JP_FWD_RET_CASE('c', char, charValue)
+            JP_FWD_RET_CASE('C', unsigned char, unsignedCharValue)
+            JP_FWD_RET_CASE('s', short, shortValue)
+            JP_FWD_RET_CASE('S', unsigned short, unsignedShortValue)
+            JP_FWD_RET_CASE('i', int, intValue)
+            JP_FWD_RET_CASE('I', unsigned int, unsignedIntValue)
+            JP_FWD_RET_CASE('l', long, longValue)
+            JP_FWD_RET_CASE('L', unsigned long, unsignedLongValue)
+            JP_FWD_RET_CASE('q', long long, longLongValue)
+            JP_FWD_RET_CASE('Q', unsigned long long, unsignedLongLongValue)
+            JP_FWD_RET_CASE('f', float, floatValue)
+            JP_FWD_RET_CASE('d', double, doubleValue)
+            JP_FWD_RET_CASE('B', BOOL, boolValue)
+            
         case 'v': {
             JP_FWD_RET_CALL_JS
             break;
         }
-        
+            
         case '{': {
             NSString *typeString = extractStructName([NSString stringWithUTF8String:returnType]);
-            #define JP_FWD_RET_STRUCT(_type, _funcSuffix) \
-            if ([typeString rangeOfString:@#_type].location != NSNotFound) {    \
-                JP_FWD_RET_CALL_JS \
-                _type ret = [jsval _funcSuffix]; \
-                [invocation setReturnValue:&ret];\
-                break;  \
-            }
+#define JP_FWD_RET_STRUCT(_type, _funcSuffix) \
+if ([typeString rangeOfString:@#_type].location != NSNotFound) {    \
+JP_FWD_RET_CALL_JS \
+_type ret = [jsval _funcSuffix]; \
+[invocation setReturnValue:&ret];\
+break;  \
+}
             JP_FWD_RET_STRUCT(CGRect, toRect)
             JP_FWD_RET_STRUCT(CGPoint, toPoint)
             JP_FWD_RET_STRUCT(CGSize, toSize)
@@ -950,18 +954,18 @@ static void overrideMethod(Class cls, NSString *selectorName, JSValue *function,
     IMP originalImp = class_respondsToSelector(cls, selector) ? class_getMethodImplementation(cls, selector) : NULL;
     
     IMP msgForwardIMP = _objc_msgForward;
-    #if !defined(__arm64__)
-        if (typeDescription[0] == '{') {
-            //In some cases that returns struct, we should use the '_stret' API:
-            //http://sealiesoftware.com/blog/archive/2008/10/30/objc_explain_objc_msgSend_stret.html
-            //NSMethodSignature knows the detail but has no API to return, we can only get the info from debugDescription.
-            NSMethodSignature *methodSignature = [NSMethodSignature signatureWithObjCTypes:typeDescription];
-            if ([methodSignature.debugDescription rangeOfString:@"is special struct return? YES"].location != NSNotFound) {
-                msgForwardIMP = (IMP)_objc_msgForward_stret;
-            }
+#if !defined(__arm64__)
+    if (typeDescription[0] == '{') {
+        //In some cases that returns struct, we should use the '_stret' API:
+        //http://sealiesoftware.com/blog/archive/2008/10/30/objc_explain_objc_msgSend_stret.html
+        //NSMethodSignature knows the detail but has no API to return, we can only get the info from debugDescription.
+        NSMethodSignature *methodSignature = [NSMethodSignature signatureWithObjCTypes:typeDescription];
+        if ([methodSignature.debugDescription rangeOfString:@"is special struct return? YES"].location != NSNotFound) {
+            msgForwardIMP = (IMP)_objc_msgForward_stret;
         }
-    #endif
-
+    }
+#endif
+    
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wundeclared-selector"
     if (class_getMethodImplementation(cls, @selector(forwardInvocation:)) != (IMP)JPForwardInvocation) {
@@ -995,7 +999,7 @@ static void overrideMethod(Class cls, NSString *selectorName, JSValue *function,
 static id callSelector(NSString *className, NSString *selectorName, JSValue *arguments, JSValue *instance, BOOL isSuper)
 {
     NSString *realClsName = [[instance valueForProperty:@"__realClsName"] toString];
-   
+    
     if (instance) {
         instance = formatJSToOC(instance);
         if (!instance || instance == _nilObj || [instance isKindOfClass:[JPBoxing class]]) return @{@"__isNil": @(YES)};
@@ -1007,7 +1011,7 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
             return _unboxOCObjectToJS(instance);
         }
     }
-
+    
     Class cls = instance ? [instance class] : NSClassFromString(className);
     SEL selector = NSSelectorFromString(selectorName);
     
@@ -1091,12 +1095,12 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
         id valObj = argumentsObj[i-2];
         switch (argumentType[0] == 'r' ? argumentType[1] : argumentType[0]) {
                 
-                #define JP_CALL_ARG_CASE(_typeString, _type, _selector) \
-                case _typeString: {                              \
-                    _type value = [valObj _selector];                     \
-                    [invocation setArgument:&value atIndex:i];\
-                    break; \
-                }
+#define JP_CALL_ARG_CASE(_typeString, _type, _selector) \
+case _typeString: {                              \
+_type value = [valObj _selector];                     \
+[invocation setArgument:&value atIndex:i];\
+break; \
+}
                 
                 JP_CALL_ARG_CASE('c', char, charValue)
                 JP_CALL_ARG_CASE('C', unsigned char, unsignedCharValue)
@@ -1123,12 +1127,12 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
             case '{': {
                 NSString *typeString = extractStructName([NSString stringWithUTF8String:argumentType]);
                 JSValue *val = arguments[i-2];
-                #define JP_CALL_ARG_STRUCT(_type, _methodName) \
-                if ([typeString rangeOfString:@#_type].location != NSNotFound) {    \
-                    _type value = [val _methodName];  \
-                    [invocation setArgument:&value atIndex:i];  \
-                    break; \
-                }
+#define JP_CALL_ARG_STRUCT(_type, _methodName) \
+if ([typeString rangeOfString:@#_type].location != NSNotFound) {    \
+_type value = [val _methodName];  \
+[invocation setArgument:&value atIndex:i];  \
+break; \
+}
                 JP_CALL_ARG_STRUCT(CGRect, toRect)
                 JP_CALL_ARG_STRUCT(CGPoint, toPoint)
                 JP_CALL_ARG_STRUCT(CGSize, toSize)
@@ -1221,7 +1225,7 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
     if (strcmp(returnType, @encode(JPFloat)) == 0) {
         strcpy(returnType, @encode(float));
     }
-
+    
     id returnValue;
     if (strncmp(returnType, "v", 1) != 0) {
         if (strncmp(returnType, "@", 1) == 0) {
@@ -1240,36 +1244,36 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
         } else {
             switch (returnType[0] == 'r' ? returnType[1] : returnType[0]) {
                     
-                #define JP_CALL_RET_CASE(_typeString, _type) \
-                case _typeString: {                              \
-                    _type tempResultSet; \
-                    [invocation getReturnValue:&tempResultSet];\
-                    returnValue = @(tempResultSet); \
-                    break; \
-                }
+#define JP_CALL_RET_CASE(_typeString, _type) \
+case _typeString: {                              \
+_type tempResultSet; \
+[invocation getReturnValue:&tempResultSet];\
+returnValue = @(tempResultSet); \
+break; \
+}
                     
-                JP_CALL_RET_CASE('c', char)
-                JP_CALL_RET_CASE('C', unsigned char)
-                JP_CALL_RET_CASE('s', short)
-                JP_CALL_RET_CASE('S', unsigned short)
-                JP_CALL_RET_CASE('i', int)
-                JP_CALL_RET_CASE('I', unsigned int)
-                JP_CALL_RET_CASE('l', long)
-                JP_CALL_RET_CASE('L', unsigned long)
-                JP_CALL_RET_CASE('q', long long)
-                JP_CALL_RET_CASE('Q', unsigned long long)
-                JP_CALL_RET_CASE('f', float)
-                JP_CALL_RET_CASE('d', double)
-                JP_CALL_RET_CASE('B', BOOL)
-
+                    JP_CALL_RET_CASE('c', char)
+                    JP_CALL_RET_CASE('C', unsigned char)
+                    JP_CALL_RET_CASE('s', short)
+                    JP_CALL_RET_CASE('S', unsigned short)
+                    JP_CALL_RET_CASE('i', int)
+                    JP_CALL_RET_CASE('I', unsigned int)
+                    JP_CALL_RET_CASE('l', long)
+                    JP_CALL_RET_CASE('L', unsigned long)
+                    JP_CALL_RET_CASE('q', long long)
+                    JP_CALL_RET_CASE('Q', unsigned long long)
+                    JP_CALL_RET_CASE('f', float)
+                    JP_CALL_RET_CASE('d', double)
+                    JP_CALL_RET_CASE('B', BOOL)
+                    
                 case '{': {
                     NSString *typeString = extractStructName([NSString stringWithUTF8String:returnType]);
-                    #define JP_CALL_RET_STRUCT(_type, _methodName) \
-                    if ([typeString rangeOfString:@#_type].location != NSNotFound) {    \
-                        _type result;   \
-                        [invocation getReturnValue:&result];    \
-                        return [JSValue _methodName:result inContext:_context];    \
-                    }
+#define JP_CALL_RET_STRUCT(_type, _methodName) \
+if ([typeString rangeOfString:@#_type].location != NSNotFound) {    \
+_type result;   \
+[invocation getReturnValue:&result];    \
+return [JSValue _methodName:result inContext:_context];    \
+}
                     JP_CALL_RET_STRUCT(CGRect, valueWithRect)
                     JP_CALL_RET_STRUCT(CGPoint, valueWithPoint)
                     JP_CALL_RET_STRUCT(CGSize, valueWithSize)
@@ -1348,25 +1352,25 @@ static id invokeVariableParameterMethod(NSMutableArray *origArgumentsList, NSMet
     
     //If you want to debug the macro code below, replace it to the expanded code:
     //https://gist.github.com/bang590/ca3720ae1da594252a2e
-    #define JP_G_ARG(_idx) getArgument(argumentsList[_idx])
-    #define JP_CALL_MSGSEND_ARG1(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0));
-    #define JP_CALL_MSGSEND_ARG2(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1));
-    #define JP_CALL_MSGSEND_ARG3(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2));
-    #define JP_CALL_MSGSEND_ARG4(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3));
-    #define JP_CALL_MSGSEND_ARG5(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3), JP_G_ARG(4));
-    #define JP_CALL_MSGSEND_ARG6(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3), JP_G_ARG(4), JP_G_ARG(5));
-    #define JP_CALL_MSGSEND_ARG7(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3), JP_G_ARG(4), JP_G_ARG(5), JP_G_ARG(6));
-    #define JP_CALL_MSGSEND_ARG8(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3), JP_G_ARG(4), JP_G_ARG(5), JP_G_ARG(6), JP_G_ARG(7));
-    #define JP_CALL_MSGSEND_ARG9(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3), JP_G_ARG(4), JP_G_ARG(5), JP_G_ARG(6), JP_G_ARG(7), JP_G_ARG(8));
-    #define JP_CALL_MSGSEND_ARG10(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3), JP_G_ARG(4), JP_G_ARG(5), JP_G_ARG(6), JP_G_ARG(7), JP_G_ARG(8), JP_G_ARG(9));
-    #define JP_CALL_MSGSEND_ARG11(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3), JP_G_ARG(4), JP_G_ARG(5), JP_G_ARG(6), JP_G_ARG(7), JP_G_ARG(8), JP_G_ARG(9), JP_G_ARG(10));
-        
-    #define JP_IF_REAL_ARG_COUNT(_num) if([argumentsList count] == _num)
-
-    #define JP_DEAL_MSGSEND(_realArgCount, _defineArgCount) \
-        if(numberOfArguments == _defineArgCount) { \
-            JP_CALL_MSGSEND_ARG##_realArgCount(_defineArgCount) \
-        }
+#define JP_G_ARG(_idx) getArgument(argumentsList[_idx])
+#define JP_CALL_MSGSEND_ARG1(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0));
+#define JP_CALL_MSGSEND_ARG2(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1));
+#define JP_CALL_MSGSEND_ARG3(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2));
+#define JP_CALL_MSGSEND_ARG4(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3));
+#define JP_CALL_MSGSEND_ARG5(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3), JP_G_ARG(4));
+#define JP_CALL_MSGSEND_ARG6(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3), JP_G_ARG(4), JP_G_ARG(5));
+#define JP_CALL_MSGSEND_ARG7(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3), JP_G_ARG(4), JP_G_ARG(5), JP_G_ARG(6));
+#define JP_CALL_MSGSEND_ARG8(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3), JP_G_ARG(4), JP_G_ARG(5), JP_G_ARG(6), JP_G_ARG(7));
+#define JP_CALL_MSGSEND_ARG9(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3), JP_G_ARG(4), JP_G_ARG(5), JP_G_ARG(6), JP_G_ARG(7), JP_G_ARG(8));
+#define JP_CALL_MSGSEND_ARG10(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3), JP_G_ARG(4), JP_G_ARG(5), JP_G_ARG(6), JP_G_ARG(7), JP_G_ARG(8), JP_G_ARG(9));
+#define JP_CALL_MSGSEND_ARG11(_num) results = new_msgSend##_num(sender, selector, JP_G_ARG(0), JP_G_ARG(1), JP_G_ARG(2), JP_G_ARG(3), JP_G_ARG(4), JP_G_ARG(5), JP_G_ARG(6), JP_G_ARG(7), JP_G_ARG(8), JP_G_ARG(9), JP_G_ARG(10));
+    
+#define JP_IF_REAL_ARG_COUNT(_num) if([argumentsList count] == _num)
+    
+#define JP_DEAL_MSGSEND(_realArgCount, _defineArgCount) \
+if(numberOfArguments == _defineArgCount) { \
+JP_CALL_MSGSEND_ARG##_realArgCount(_defineArgCount) \
+}
     
     JP_IF_REAL_ARG_COUNT(1) { JP_CALL_MSGSEND_ARG1(1) }
     JP_IF_REAL_ARG_COUNT(2) { JP_DEAL_MSGSEND(2, 1) JP_DEAL_MSGSEND(2, 2) }
@@ -1394,15 +1398,15 @@ static id getArgument(id valObj){
 
 static id genCallbackBlock(JSValue *jsVal)
 {
-    #define BLK_TRAITS_ARG(_idx, _paramName) \
-    if (_idx < argTypes.count) { \
-        if (blockTypeIsObject(trim(argTypes[_idx]))) {  \
-            [list addObject:formatOCToJS((__bridge id)_paramName)]; \
-        } else {  \
-            [list addObject:formatOCToJS([NSNumber numberWithLongLong:(long long)_paramName])]; \
-        }   \
-    }
-
+#define BLK_TRAITS_ARG(_idx, _paramName) \
+if (_idx < argTypes.count) { \
+if (blockTypeIsObject(trim(argTypes[_idx]))) {  \
+[list addObject:formatOCToJS((__bridge id)_paramName)]; \
+} else {  \
+[list addObject:formatOCToJS([NSNumber numberWithLongLong:(long long)_paramName])]; \
+}   \
+}
+    
     NSArray *argTypes = [[jsVal[@"args"] toString] componentsSeparatedByString:@","];
     id cb = ^id(void *p0, void *p1, void *p2, void *p3, void *p4, void *p5) {
         NSMutableArray *list = [[NSMutableArray alloc] init];
@@ -1428,30 +1432,30 @@ static int sizeOfStructTypes(NSString *structTypes)
     int size = 0;
     while (types[index]) {
         switch (types[index]) {
-            #define JP_STRUCT_SIZE_CASE(_typeChar, _type)   \
-            case _typeChar: \
-                size += sizeof(_type);  \
-                break;
+#define JP_STRUCT_SIZE_CASE(_typeChar, _type)   \
+case _typeChar: \
+size += sizeof(_type);  \
+break;
                 
-            JP_STRUCT_SIZE_CASE('c', char)
-            JP_STRUCT_SIZE_CASE('C', unsigned char)
-            JP_STRUCT_SIZE_CASE('s', short)
-            JP_STRUCT_SIZE_CASE('S', unsigned short)
-            JP_STRUCT_SIZE_CASE('i', int)
-            JP_STRUCT_SIZE_CASE('I', unsigned int)
-            JP_STRUCT_SIZE_CASE('l', long)
-            JP_STRUCT_SIZE_CASE('L', unsigned long)
-            JP_STRUCT_SIZE_CASE('q', long long)
-            JP_STRUCT_SIZE_CASE('Q', unsigned long long)
-            JP_STRUCT_SIZE_CASE('f', float)
-            JP_STRUCT_SIZE_CASE('F', CGFloat)
-            JP_STRUCT_SIZE_CASE('N', NSInteger)
-            JP_STRUCT_SIZE_CASE('U', NSUInteger)
-            JP_STRUCT_SIZE_CASE('d', double)
-            JP_STRUCT_SIZE_CASE('B', BOOL)
-            JP_STRUCT_SIZE_CASE('*', void *)
-            JP_STRUCT_SIZE_CASE('^', void *)
-            
+                JP_STRUCT_SIZE_CASE('c', char)
+                JP_STRUCT_SIZE_CASE('C', unsigned char)
+                JP_STRUCT_SIZE_CASE('s', short)
+                JP_STRUCT_SIZE_CASE('S', unsigned short)
+                JP_STRUCT_SIZE_CASE('i', int)
+                JP_STRUCT_SIZE_CASE('I', unsigned int)
+                JP_STRUCT_SIZE_CASE('l', long)
+                JP_STRUCT_SIZE_CASE('L', unsigned long)
+                JP_STRUCT_SIZE_CASE('q', long long)
+                JP_STRUCT_SIZE_CASE('Q', unsigned long long)
+                JP_STRUCT_SIZE_CASE('f', float)
+                JP_STRUCT_SIZE_CASE('F', CGFloat)
+                JP_STRUCT_SIZE_CASE('N', NSInteger)
+                JP_STRUCT_SIZE_CASE('U', NSUInteger)
+                JP_STRUCT_SIZE_CASE('d', double)
+                JP_STRUCT_SIZE_CASE('B', BOOL)
+                JP_STRUCT_SIZE_CASE('*', void *)
+                JP_STRUCT_SIZE_CASE('^', void *)
+                
             default:
                 break;
         }
@@ -1467,44 +1471,44 @@ static void getStructDataWithDict(void *structData, NSDictionary *dict, NSDictio
     int position = 0;
     for (int i = 0; i < itemKeys.count; i ++) {
         switch(structTypes[i]) {
-            #define JP_STRUCT_DATA_CASE(_typeStr, _type, _transMethod) \
-            case _typeStr: { \
-                int size = sizeof(_type);    \
-                _type val = [dict[itemKeys[i]] _transMethod];   \
-                memcpy(structData + position, &val, size);  \
-                position += size;    \
-                break;  \
-            }
+#define JP_STRUCT_DATA_CASE(_typeStr, _type, _transMethod) \
+case _typeStr: { \
+int size = sizeof(_type);    \
+_type val = [dict[itemKeys[i]] _transMethod];   \
+memcpy(structData + position, &val, size);  \
+position += size;    \
+break;  \
+}
                 
-            JP_STRUCT_DATA_CASE('c', char, charValue)
-            JP_STRUCT_DATA_CASE('C', unsigned char, unsignedCharValue)
-            JP_STRUCT_DATA_CASE('s', short, shortValue)
-            JP_STRUCT_DATA_CASE('S', unsigned short, unsignedShortValue)
-            JP_STRUCT_DATA_CASE('i', int, intValue)
-            JP_STRUCT_DATA_CASE('I', unsigned int, unsignedIntValue)
-            JP_STRUCT_DATA_CASE('l', long, longValue)
-            JP_STRUCT_DATA_CASE('L', unsigned long, unsignedLongValue)
-            JP_STRUCT_DATA_CASE('q', long long, longLongValue)
-            JP_STRUCT_DATA_CASE('Q', unsigned long long, unsignedLongLongValue)
-            JP_STRUCT_DATA_CASE('f', float, floatValue)
-            JP_STRUCT_DATA_CASE('d', double, doubleValue)
-            JP_STRUCT_DATA_CASE('B', BOOL, boolValue)
-            JP_STRUCT_DATA_CASE('N', NSInteger, integerValue)
-            JP_STRUCT_DATA_CASE('U', NSUInteger, unsignedIntegerValue)
-            
+                JP_STRUCT_DATA_CASE('c', char, charValue)
+                JP_STRUCT_DATA_CASE('C', unsigned char, unsignedCharValue)
+                JP_STRUCT_DATA_CASE('s', short, shortValue)
+                JP_STRUCT_DATA_CASE('S', unsigned short, unsignedShortValue)
+                JP_STRUCT_DATA_CASE('i', int, intValue)
+                JP_STRUCT_DATA_CASE('I', unsigned int, unsignedIntValue)
+                JP_STRUCT_DATA_CASE('l', long, longValue)
+                JP_STRUCT_DATA_CASE('L', unsigned long, unsignedLongValue)
+                JP_STRUCT_DATA_CASE('q', long long, longLongValue)
+                JP_STRUCT_DATA_CASE('Q', unsigned long long, unsignedLongLongValue)
+                JP_STRUCT_DATA_CASE('f', float, floatValue)
+                JP_STRUCT_DATA_CASE('d', double, doubleValue)
+                JP_STRUCT_DATA_CASE('B', BOOL, boolValue)
+                JP_STRUCT_DATA_CASE('N', NSInteger, integerValue)
+                JP_STRUCT_DATA_CASE('U', NSUInteger, unsignedIntegerValue)
+                
             case 'F': {
                 int size = sizeof(CGFloat);
                 CGFloat val;
-                #if CGFLOAT_IS_DOUBLE
+#if CGFLOAT_IS_DOUBLE
                 val = [dict[itemKeys[i]] doubleValue];
-                #else
+#else
                 val = [dict[itemKeys[i]] floatValue];
-                #endif
+#endif
                 memcpy(structData + position, &val, size);
                 position += size;
                 break;
             }
-            
+                
             case '*':
             case '^': {
                 int size = sizeof(void *);
@@ -1512,7 +1516,7 @@ static void getStructDataWithDict(void *structData, NSDictionary *dict, NSDictio
                 memcpy(structData + position, &val, size);
                 break;
             }
-            
+                
         }
     }
 }
@@ -1526,33 +1530,33 @@ static NSDictionary *getDictOfStruct(void *structData, NSDictionary *structDefin
     
     for (int i = 0; i < itemKeys.count; i ++) {
         switch(structTypes[i]) {
-            #define JP_STRUCT_DICT_CASE(_typeName, _type)   \
-            case _typeName: { \
-                size_t size = sizeof(_type); \
-                _type *val = malloc(size);   \
-                memcpy(val, structData + position, size);   \
-                [dict setObject:@(*val) forKey:itemKeys[i]];    \
-                free(val);  \
-                position += size;   \
-                break;  \
-            }
-            JP_STRUCT_DICT_CASE('c', char)
-            JP_STRUCT_DICT_CASE('C', unsigned char)
-            JP_STRUCT_DICT_CASE('s', short)
-            JP_STRUCT_DICT_CASE('S', unsigned short)
-            JP_STRUCT_DICT_CASE('i', int)
-            JP_STRUCT_DICT_CASE('I', unsigned int)
-            JP_STRUCT_DICT_CASE('l', long)
-            JP_STRUCT_DICT_CASE('L', unsigned long)
-            JP_STRUCT_DICT_CASE('q', long long)
-            JP_STRUCT_DICT_CASE('Q', unsigned long long)
-            JP_STRUCT_DICT_CASE('f', float)
-            JP_STRUCT_DICT_CASE('F', CGFloat)
-            JP_STRUCT_DICT_CASE('N', NSInteger)
-            JP_STRUCT_DICT_CASE('U', NSUInteger)
-            JP_STRUCT_DICT_CASE('d', double)
-            JP_STRUCT_DICT_CASE('B', BOOL)
-            
+#define JP_STRUCT_DICT_CASE(_typeName, _type)   \
+case _typeName: { \
+size_t size = sizeof(_type); \
+_type *val = malloc(size);   \
+memcpy(val, structData + position, size);   \
+[dict setObject:@(*val) forKey:itemKeys[i]];    \
+free(val);  \
+position += size;   \
+break;  \
+}
+                JP_STRUCT_DICT_CASE('c', char)
+                JP_STRUCT_DICT_CASE('C', unsigned char)
+                JP_STRUCT_DICT_CASE('s', short)
+                JP_STRUCT_DICT_CASE('S', unsigned short)
+                JP_STRUCT_DICT_CASE('i', int)
+                JP_STRUCT_DICT_CASE('I', unsigned int)
+                JP_STRUCT_DICT_CASE('l', long)
+                JP_STRUCT_DICT_CASE('L', unsigned long)
+                JP_STRUCT_DICT_CASE('q', long long)
+                JP_STRUCT_DICT_CASE('Q', unsigned long long)
+                JP_STRUCT_DICT_CASE('f', float)
+                JP_STRUCT_DICT_CASE('F', CGFloat)
+                JP_STRUCT_DICT_CASE('N', NSInteger)
+                JP_STRUCT_DICT_CASE('U', NSUInteger)
+                JP_STRUCT_DICT_CASE('d', double)
+                JP_STRUCT_DICT_CASE('B', BOOL)
+                
             case '*':
             case '^': {
                 size_t size = sizeof(void *);
@@ -1562,7 +1566,7 @@ static NSDictionary *getDictOfStruct(void *structData, NSDictionary *structDefin
                 position += size;
                 break;
             }
-            
+                
         }
     }
     return dict;
